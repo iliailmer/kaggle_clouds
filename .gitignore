@@ -1,0 +1,9 @@
+.vscode
+.mypy*
+*.ipynb*
+logs
+*.json
+*.csv
+*.txt
+notebooks
+loss
