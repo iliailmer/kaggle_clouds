@@ -4,15 +4,10 @@ import argparse
 from dataloader.loader import CloudDataset
 from torch.utils.data import DataLoader
 from catalyst.dl.runner import SupervisedRunner
-from models.ternausnet import AlbuNet, UNet16
-from catalyst.contrib.models.segmentation import (Unet,
-                                                  ResNetUnet,
-                                                  ResNetLinknet)
 
 import tqdm
 import cv2
 import pandas as pd
-import numpy as np
 from utils.utils import (get_preprocessing, post_process,
                          get_validation_augmentation)
 import gc

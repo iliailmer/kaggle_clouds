@@ -1,6 +1,6 @@
 import numpy as np
 from catalyst.dl.callbacks import CriterionAggregatorCallback
-from catalyst.contrib.criterion import DiceLoss, LovaszLossMultiClass, IoULoss
+from catalyst.contrib.criterion import DiceLoss, IoULoss
 import torch
 from catalyst.contrib.optimizers import RAdam, Lookahead
 from utils import (
@@ -22,7 +22,7 @@ from catalyst.dl.callbacks import (EarlyStoppingCallback,
 from torch import optim
 from torch.utils.data import DataLoader
 from dataloader import CloudDataset
-from models.ternausnet import AlbuNet, UNet16
+
 import segmentation_models_pytorch as smp
 from catalyst.utils.seed import set_global_seed
 from catalyst.utils.torch import prepare_cudnn

@@ -104,7 +104,8 @@ def get_training_augmentation(p=0.5):
     train_transform = [
         albu.Resize(320, 640),
         albu.OneOf([albu.HorizontalFlip(p=p),
-                    albu.VerticalFlip(p=p)], p=0.95.),
+                    albu.VerticalFlip(p=p)],
+                   p=0.95),
         albu.ShiftScaleRotate(scale_limit=0.5,
                               rotate_limit=15,
                               shift_limit=0.1,
