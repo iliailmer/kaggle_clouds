@@ -1,3 +1,4 @@
+import torch
 import os
 import cv2
 import numpy as np
@@ -76,19 +77,21 @@ class CloudDataset(Dataset):
                  preload: bool = False,
                  image_size: tuple = (320, 640),
                  augmentation: str = 'default',
-                 filter_bad_images: bool = False):
+                 mixup=False,
+                 filter_bad_images: bool = True):
         """
 
         Args:
             path: path to data
             df: dataframe with data
             datatype: train|valid|test
-            img_ids: list of imagee ids
+            img_ids: list of image ids
             transforms: albumentation transforms
             preprocessing: preprocessing if necessary
             preload: whether to preload data
             image_size: image size for resizing
             augmentation: name of augmentation settings
+            mixup: mixup images during training
             filter_bad_images: to filter out bad images
         """
 
@@ -113,50 +116,49 @@ class CloudDataset(Dataset):
         self.transforms = transforms
         self.preprocessing = preprocessing
         self.augmentation = augmentation
-        self.dir_name = f"{self.path}/preload_{augmentation}_{image_size[0]}_{image_size[1]}"
+        self.mixup = mixup
+        if self.mixup:
+            self.weight = np.random.beta(1, 1)
 
-        self.preload = preload
-        self.preloaded = False
-        if self.preload:
-            self.save_processed_()
-            self.preloaded = True
-
-    def save_processed_(self):
-        """
-        Saves train images with augmentations, to speed up training.
-
-        Returns:
-
-        """
-        os.makedirs(self.dir_name, exist_ok=True)
-        self.dir_name += f"/{self.datatype}"
-        if not os.path.exists(self.dir_name):
-            os.makedirs(self.dir_name)
-            for i, e in enumerate(self.img_ids):
-                img, mask = self.__getitem__(i)
-                np.save(f"{self.dir_name}/{e}_mask.npy", mask)
-                np.save(f"{self.dir_name}/{e}_img.npy", img)
+    def get_mix(self, idx):
+        image_name = self.img_ids[idx]
+        mask = make_mask(self.df, image_name)
+        image_path = os.path.join(self.data_folder, image_name)
+        img = cv2.imread(image_path)
+        img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+        augmented = self.transforms(image=img, mask=mask)
+        img = augmented['image']
+        mask = augmented['mask']
+        if self.preprocessing:
+            preprocessed = self.preprocessing(image=img, mask=mask)
+            img = preprocessed['image']
+            mask = preprocessed['mask']
+        return img, mask
 
     def __getitem__(self, idx):
         image_name = self.img_ids[idx]
-        if self.preloaded and self.datatype != 'valid':
-            img = np.load(f"{self.dir_name}/{image_name}_img.npy")
-            mask = np.load(f"{self.dir_name}/{image_name}_mask.npy")
-
+        mask = make_mask(self.df, image_name)
+        image_path = os.path.join(self.data_folder, image_name)
+        img = cv2.imread(image_path)
+        img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+        augmented = self.transforms(image=img, mask=mask)
+        img = augmented['image']
+        mask = augmented['mask']
+        if self.preprocessing:
+            preprocessed = self.preprocessing(image=img, mask=mask)
+            img = preprocessed['image']
+            mask = preprocessed['mask']
+        if not self.mixup:
+            return img, mask
+        elif self.datatype == 'train':
+            idx = np.random.randint(0, len(self.img_ids))
+            img_mix, mask_mix = self.get_mix(idx)
+            img = self.weight*img + (1-self.weight)*img_mix
+            mask = self.weight*mask + (1-self.weight)*mask_mix
+            # mask = (mask > 0).int()
+            return img, mask
         else:
-            mask = make_mask(self.df, image_name)
-            image_path = os.path.join(self.data_folder, image_name)
-            img = cv2.imread(image_path)
-            img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-            augmented = self.transforms(image=img, mask=mask)
-            img = augmented['image']
-            mask = augmented['mask']
-            if self.preprocessing:
-                preprocessed = self.preprocessing(image=img, mask=mask)
-                img = preprocessed['image']
-                mask = preprocessed['mask']
-
-        return img, mask
+            return img, mask
 
     def __len__(self):
         return len(self.img_ids)

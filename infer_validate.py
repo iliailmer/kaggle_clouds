@@ -1,11 +1,9 @@
+from models.linknet_attention import LinkNetGated
 import argparse
 from dataloader.loader import CloudDataset
 from torch.utils.data import DataLoader
 from catalyst.dl.runner import SupervisedRunner
-from models.ternausnet import AlbuNet, UNet16
-from catalyst.contrib.models.segmentation import (Unet,
-                                                  ResNetUnet,
-                                                  ResNetLinknet)
+
 from catalyst.dl.callbacks import (InferCallback,
                                    CheckpointCallback)
 import tqdm
@@ -33,38 +31,43 @@ num_workers = 2
 bs = args.bs
 preprocessing_fn = smp.encoders.get_preprocessing_fn(
     encoder_name=args.encoder, pretrained='imagenet')
-valid_dataset = CloudDataset(df=train, datatype='valid', img_ids=valid_ids,
+valid_dataset = CloudDataset(df=train,
+                             path=path,
+                             datatype='valid',
+                             preload=False,
+                             img_ids=valid_ids,
+                             filter_bad_images=True,
                              transforms=get_validation_augmentation(),
                              preprocessing=get_preprocessing(preprocessing_fn))
-valid_loader = DataLoader(valid_dataset, batch_size=bs,
-                          shuffle=False, num_workers=num_workers)
-runner = SupervisedRunner()
-models = {'albunet': (AlbuNet, {'num_classes': 4,
-                                'pretrained': False}),
-          'resnetunet': (ResNetUnet, {'num_classes': 4,
-                                      'pretrained': False,
-                                      'arch': 'resnet50'}),
-          'smpunet': (smp.Unet, {'encoder_name': args.encoder,
+valid_loader = DataLoader(valid_dataset,
+                          batch_size=bs,
+                          shuffle=False,
+                          num_workers=num_workers)
+
+models = {'smpunet': (smp.Unet, {'encoder_name': args.encoder,
                                  'encoder_weights': 'imagenet',
                                  'classes': 4,
                                  'activation': None}),
-          'unet16': (UNet16, {'num_classes': 4,
-                              'pretrained': False, }),
-          'unet': (Unet, {'num_classes': 4}),
-          'ResNetLinknet': (ResNetLinknet, {'num_classes': 4,
-                                            'arch': 'resnet34',
-                                            'pretrained': False})
-          }
-assert args.model.lower() in models.keys(), f"Supported models " + \
-    f"are {list(models.keys())}" + \
-    f"got {args.model.lower()}"
-
-
-model = models[args.model.lower()][0](**models[args.model.lower()][1]).cuda()
+          'linknet': (smp.Linknet, {'encoder_name': args.encoder,
+                                    'encoder_weights': 'imagenet',
+                                    'classes': 4,
+                                    'activation': None}),
+          'fpn': (smp.FPN, {'encoder_name': args.encoder,
+                            'encoder_weights': 'imagenet',
+                            'classes': 4,
+                            'activation': None}),
+          'attn_linknet': (LinkNetGated, {'num_classes': 4,
+                                          'in_channels': 3
+                                          })}
+model = models[args.model.lower()][0](**models[args.model.lower()][1])
 encoded_pixels = []
 loaders = {"infer": valid_loader}
 logdir = f'./logs/{args.model}/fold_{args.fold}'
 gc.collect()
+runner = SupervisedRunner(model=model,
+                          device='cuda',
+                          input_key='image',
+                          input_target_key='mask')
 runner.infer(
     model=model,
     loaders=loaders,
@@ -73,6 +76,7 @@ runner.infer(
             resume=f"{logdir}/checkpoints/best.pth"),
         InferCallback()
     ],
+    # fp16={"opt_level": "O1"},
 )
 valid_masks = []
 probabilities = np.zeros((2220, 350, 525))
@@ -94,10 +98,9 @@ for i, (batch, output) in enumerate(tqdm.tqdm(zip(
 gc.collect()
 
 
-def sigmoid(x): return 1 / (1 + np.exp(-x))
+def sigmoid(x): return 1/(1+np.exp(-x))
 
 
-# np.save(f'probability_valid_{args.fold}', probabilities)
 class_params = {}
 for class_id in range(4):
     print(class_id)
@@ -132,5 +135,5 @@ for class_id in range(4):
     class_params[class_id] = (np.float(best_threshold), np.int(best_size))
 
 
-with open(f'class_params_fold_{args.fold}.json', 'w') as fp:
+with open(f'class_params_{args.model.lower()}.json', 'w') as fp:
     json.dump(class_params, fp)

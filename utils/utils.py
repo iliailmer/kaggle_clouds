@@ -100,32 +100,30 @@ def to_tensor(x, **kwargs):
     return x.transpose(2, 0, 1).astype('float32')
 
 
-def get_training_augmentation(p=0.5):
+def get_training_augmentation(p=0.5, size=(320, 640)):
     train_transform = [
-        albu.Resize(320, 640),
-        albu.OneOf([albu.HorizontalFlip(p=p),
-                    albu.VerticalFlip(p=p)],
-                   p=0.95),
+        albu.Resize(*size),
+        albu.HorizontalFlip(p=p),
         albu.ShiftScaleRotate(scale_limit=0.5,
                               rotate_limit=15,
                               shift_limit=0.1,
                               border_mode=0,
                               p=p),
         albu.GridDistortion(p=p),
-        albu.OpticalDistortion(distort_limit=2,
+        albu.OpticalDistortion(distort_limit=0.1,
                                shift_limit=0.5,
                                p=p),
-        albu.Cutout(p=p),
+        # albu.Cutout(p=p),
         albu.OneOf([albu.Blur(p=p),
-                    albu.GaussianBlur(p=p)]),
+                    albu.GaussianBlur(p=p)], p=p),
     ]
     return albu.Compose(train_transform)
 
 
-def get_validation_augmentation():
+def get_validation_augmentation(size):
     """Add paddings to make image shape divisible by 32"""
     test_transform = [
-        albu.Resize(320, 640)
+        albu.Resize(size[0], size[1])
     ]
     return albu.Compose(test_transform)
 

@@ -7,3 +7,6 @@ logs
 *.txt
 notebooks
 loss
+apex
+*.sh
+*/__pycache__/*
