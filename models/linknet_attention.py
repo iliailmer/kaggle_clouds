@@ -17,22 +17,22 @@ class Attention(nn.Module):
         self.conv_x = Conv2dBn(in_channels_x, out_channels,
                                1, 1, 0, True)
         self.activ = nn.ReLU(True)  # Swish()
-        self.psi = nn.Sequential(  # nn.ReLU(True),
-            Conv2dBn(out_channels, 1, 1, 0, True),
+        self.psi = nn.Sequential(Conv2dBn(out_channels, 1, 1,1, 0, True),
             nn.Sigmoid())
 
     def forward(self, x_, g):
         x = self.up(x_)
         x = self.conv_x(x)
         g = self.psi(self.activ(self.conv_g(g)+x))
-        x = x_*g
+        x = x*g
         return x
 
 
 class Conv2dBn(nn.Module):
     def __init__(self, in_channels, out_channels, k, s, p, bias=False):
         super().__init__()
-        self.conv = nn.Conv2d(in_channels, out_channels, k, s, p, bias=bias)
+        self.conv = nn.Conv2d(in_channels, out_channels, kernel_size=k,
+                              stride=s, padding=p, bias=bias)
         self.bn = nn.BatchNorm2d(out_channels)
 
     def forward(self, x):
@@ -50,7 +50,8 @@ class DecoderBlockGated(nn.Module):
                               align_corners=True)
         self.attention_upsample = Attention(in_channels // 4,
                                             in_channels_shortcut,
-                                            out_channels=in_channels // 4)
+                                            out_channels=out_channels)
+                                            # in_channels // 4)
 
         self.convbn2 = Conv2dBn(in_channels//4, out_channels,
                                 k=1, s=1, p=0)
@@ -89,14 +90,16 @@ class LinkNetGated(nn.Module):
         self.dec2 = DecoderBlockGated(256, 128, 128)
         self.conv2 = Conv2dBn(256+128, 128, 3, 1, 1)  # 128
         self.dec1 = DecoderBlockGated(128, 64, 64)
-        self.conv1 = Conv2dBn(128+64, 64, 3, 1, 1)  # 128
+        self.conv1 = Conv2dBn(128+64, 64, 3, 1, 1)  # 64
 
-        self.full_conv = DecoderBlockGated(64, 32, 3, 1, 1)
-        self.bn2 = nn.BatchNorm2d(32)
+        self.full_conv = DecoderBlockGated(64, 64, 32)
 
-        self.convbn3 = Conv2dBn(32, 32, 3, 1, 1)
-        self.out = nn.ConvTranspose2d(32, num_classes, 2, stride=2, bias=False)
-        self.bnout = nn.BatchNorm2d(num_classes)
+        self.convbn3 = Conv2dBn(32+64, 16, 3, 1, 1)
+        self.out = nn.Sequential(nn.Upsample(scale_factor=2,
+                                             mode='bilinear',
+                                             align_corners=True),
+                                             nn.Conv2d(16, num_classes, 2,
+                                                       stride=2, bias=False))
 
         for (name, m) in self.named_modules():
             if 'enc' not in name and 'conv1_' not in name:
@@ -121,9 +124,7 @@ class LinkNetGated(nn.Module):
         dec3 = self.act(self.conv3(self.dec3(enc4, enc3)))
         dec2 = self.act(self.conv2(self.dec2(dec3, enc2)))
         dec1 = self.act(self.conv1(self.dec1(dec2, enc1)))
-
-        full_conv = self.act(self.bn2(self.full_conv(dec1)))
-        conv3x3 = self.act(self.convbn3(full_conv))
-        out = self.act(self.bnout(self.out(conv3x3)))
+        conv3x3 = self.act(self.convbn3(self.full_conv(dec1, x_)))
+        out = self.act(self.out(conv3x3))
 
         return out

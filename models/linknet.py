@@ -5,7 +5,8 @@ import math
 class ResidualBlock(nn.Module):
     """Two such blocks form one Encoder block"""
 
-    def __init__(self, in_channels, out_channels, kernel_size, stride, padding,
+    def __init__(self, in_channels, out_channels,
+                 kernel_size, stride, padding,
                  shortcut=None):
         super().__init__()
         self.conv1 = nn.Conv2d(in_channels, out_channels,
